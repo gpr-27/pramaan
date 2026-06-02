@@ -3,6 +3,8 @@ import { fetchNews } from '../tools/news_fetcher.js';
 import { personalizeArticles, getComparisonView } from '../agents/personalizer.js';
 import { synthesizeTopic, answerQuestion } from '../agents/synthesizer.js';
 import { adaptArticle, getTranslationComparison } from '../agents/adaptor.js';
+import logger from '../lib/logger.js';
+import { isModelAllowed } from '../config/index.js';
 
 const router = express.Router();
 
@@ -12,19 +14,21 @@ const router = express.Router();
  */
 router.post('/personalized-feed', async (req, res) => {
   try {
-    const { intent, count = 5 } = req.body;
+    const { intent, count = 5, model } = req.body;
 
     if (!intent) {
       return res.status(400).json({ error: 'intent is required' });
     }
 
-    console.log(`Fetching personalized feed for ${intent.user_type}...`);
+    const useModel = isModelAllowed(model) ? model : undefined;
+
+    logger.info('personalized-feed', { user_type: intent.user_type, model: useModel });
 
     // Fetch news articles
     const articles = await fetchNews({ count: count * 2 });
 
     // Personalize for user
-    const personalizedArticles = await personalizeArticles(articles, intent, count);
+    const personalizedArticles = await personalizeArticles(articles, intent, count, useModel);
 
     res.json({
       articles: personalizedArticles,
@@ -35,7 +39,7 @@ router.post('/personalized-feed', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Personalized feed error:', error);
+    logger.error('Personalized feed error:', error);
     res.status(500).json({
       error: 'Failed to generate personalized feed',
       message: error.message
@@ -49,18 +53,22 @@ router.post('/personalized-feed', async (req, res) => {
  */
 router.post('/compare', async (req, res) => {
   try {
-    const { articleId } = req.body;
+    const { articleId, model } = req.body;
 
     if (!articleId) {
       return res.status(400).json({ error: 'articleId is required' });
     }
 
+    const useModel = isModelAllowed(model) ? model : undefined;
+
     // Fetch article
     const articles = await fetchNews({ count: 10 });
     const article = articles.find(a => a.id === articleId) || articles[0];
 
+    logger.info('compare', { articleId, model: useModel });
+
     // Get comparison view
-    const comparison = await getComparisonView(article);
+    const comparison = await getComparisonView(article, useModel);
 
     res.json({
       comparison,
@@ -68,7 +76,7 @@ router.post('/compare', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Comparison error:', error);
+    logger.error('Comparison error:', error);
     res.status(500).json({
       error: 'Failed to generate comparison',
       message: error.message
@@ -82,16 +90,18 @@ router.post('/compare', async (req, res) => {
  */
 router.post('/synthesize', async (req, res) => {
   try {
-    const { topic, intent } = req.body;
+    const { topic, intent, model } = req.body;
 
     if (!topic || !intent) {
       return res.status(400).json({ error: 'topic and intent are required' });
     }
 
-    console.log(`Synthesizing topic: ${topic}`);
+    const useModel = isModelAllowed(model) ? model : undefined;
+
+    logger.info('synthesize', { topic, model: useModel });
 
     // Generate synthesis
-    const briefing = await synthesizeTopic(topic, intent);
+    const briefing = await synthesizeTopic(topic, intent, 5, useModel);
 
     res.json({
       briefing,
@@ -99,7 +109,7 @@ router.post('/synthesize', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Synthesis error:', error);
+    logger.error('Synthesis error:', error);
     res.status(500).json({
       error: 'Failed to synthesize topic',
       message: error.message
@@ -113,16 +123,18 @@ router.post('/synthesize', async (req, res) => {
  */
 router.post('/ask', async (req, res) => {
   try {
-    const { question, briefing, intent } = req.body;
+    const { question, briefing, intent, model } = req.body;
 
     if (!question || !briefing || !intent) {
       return res.status(400).json({ error: 'question, briefing, and intent are required' });
     }
 
-    console.log(`Answering question: ${question}`);
+    const useModel = isModelAllowed(model) ? model : undefined;
+
+    logger.info('ask', { question, model: useModel });
 
     // Answer question
-    const answer = await answerQuestion(question, briefing, intent);
+    const answer = await answerQuestion(question, briefing, intent, useModel);
 
     res.json({
       answer,
@@ -130,7 +142,7 @@ router.post('/ask', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Q&A error:', error);
+    logger.error('Q&A error:', error);
     res.status(500).json({
       error: 'Failed to answer question',
       message: error.message
@@ -144,16 +156,18 @@ router.post('/ask', async (req, res) => {
  */
 router.post('/translate', async (req, res) => {
   try {
-    const { article, intent } = req.body;
+    const { article, intent, model } = req.body;
 
     if (!article) {
       return res.status(400).json({ error: 'article is required' });
     }
 
-    console.log('Translating article to Hindi...');
+    const useModel = isModelAllowed(model) ? model : undefined;
+
+    logger.info('translate', { model: useModel });
 
     // Adapt article
-    const adapted = await adaptArticle(article, intent || {});
+    const adapted = await adaptArticle(article, intent || {}, useModel);
 
     res.json({
       adapted,
@@ -161,7 +175,7 @@ router.post('/translate', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Translation error:', error);
+    logger.error('Translation error:', error);
     res.status(500).json({
       error: 'Failed to translate article',
       message: error.message
@@ -175,16 +189,18 @@ router.post('/translate', async (req, res) => {
  */
 router.post('/translation-comparison', async (req, res) => {
   try {
-    const { content, intent } = req.body;
+    const { content, intent, model } = req.body;
 
     if (!content) {
       return res.status(400).json({ error: 'content is required' });
     }
 
-    console.log('Generating translation comparison...');
+    const useModel = isModelAllowed(model) ? model : undefined;
+
+    logger.info('translation-comparison', { model: useModel });
 
     // Get comparison
-    const comparison = await getTranslationComparison(content, intent || {});
+    const comparison = await getTranslationComparison(content, intent || {}, useModel);
 
     res.json({
       comparison,
@@ -192,7 +208,7 @@ router.post('/translation-comparison', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Translation comparison error:', error);
+    logger.error('Translation comparison error:', error);
     res.status(500).json({
       error: 'Failed to generate translation comparison',
       message: error.message

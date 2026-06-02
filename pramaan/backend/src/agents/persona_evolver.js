@@ -1,6 +1,5 @@
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+import { groq, resolveModel } from '../lib/groqClient.js';
+import logger from '../lib/logger.js';
 
 /**
  * Persona Evolution Agent
@@ -10,7 +9,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 /**
  * Analyze if persona should evolve based on interactions
  */
-export async function shouldEvolvePersona(persona, interactions) {
+export async function shouldEvolvePersona(persona, interactions, model) {
   // Rule-based checks first (to save LLM calls)
 
   // Need at least 5 interactions
@@ -75,8 +74,10 @@ EXAMPLES:
 
 Be conservative. Only suggest evolution if there are CLEAR signals.`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`shouldEvolvePersona using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -93,12 +94,12 @@ Be conservative. Only suggest evolution if there are CLEAR signals.`;
 
     const analysis = JSON.parse(completion.choices[0].message.content);
 
-    console.log(`🔍 Persona evolution analysis for ${persona.user_id}:`, analysis);
+    logger.info(`🔍 Persona evolution analysis for ${persona.user_id}:`, analysis);
 
     return analysis;
 
   } catch (error) {
-    console.error('Persona evolution analysis error:', error.message);
+    logger.error('Persona evolution analysis error:', error.message);
 
     // Fallback: Conservative rule-based decision
     return {
@@ -113,7 +114,7 @@ Be conservative. Only suggest evolution if there are CLEAR signals.`;
 /**
  * Generate evolved persona using AI
  */
-export async function evolvePersona(persona, interactions, evolutionSignals) {
+export async function evolvePersona(persona, interactions, evolutionSignals, model) {
   try {
     const recentInteractions = interactions.slice(-20); // Last 20 interactions
 
@@ -176,8 +177,10 @@ Output: {
   "personalization_note": "Focus on funding rounds, valuations, cap tables"
 }`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`evolvePersona using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -194,12 +197,12 @@ Output: {
 
     const evolved = JSON.parse(completion.choices[0].message.content);
 
-    console.log(`✨ Persona evolved for ${persona.user_id}:`, evolved.changes_made);
+    logger.info(`✨ Persona evolved for ${persona.user_id}:`, evolved.changes_made);
 
     return evolved;
 
   } catch (error) {
-    console.error('Persona evolution error:', error.message);
+    logger.error('Persona evolution error:', error.message);
 
     // Fallback: Return current persona unchanged
     return {

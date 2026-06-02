@@ -1,12 +1,11 @@
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+import { groq, resolveModel } from '../lib/groqClient.js';
+import logger from '../lib/logger.js';
 
 /**
  * Cultural Adaptation Agent
  * Translates and culturally adapts business news
  */
-export async function adaptToHindi(content, context = {}) {
+export async function adaptToHindi(content, context = {}, model) {
   try {
     const prompt = `You are translating business news from English to Hindi with cultural adaptation.
 
@@ -55,8 +54,10 @@ Literal: "आरबीआई की रेपो दर वृद्धि उ�
 
 Culturally Adapted: "RBI ने ब्याज दर बढ़ाई है। इसका मतलब: बैंक FD पर ज्यादा रिटर्न मिलेगा, लेकिन कंपनियों का लोन महंगा होगा। आपके mutual fund पर असर: debt funds में थोड़ा फायदा, equity funds में शॉर्ट-टर्म में गिरावट हो सकती है। सरल शब्दों में - जब RBI interest rate बढ़ाता है, तो saving accounts/FD का रिटर्न बढ़ता है, पर loan (होम लोन, कार लोन) की EMI बढ़ सकती है।"`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`adaptToHindi using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -81,7 +82,7 @@ Culturally Adapted: "RBI ने ब्याज दर बढ़ाई है।
     };
 
   } catch (error) {
-    console.error('Adaptation error:', error.message);
+    logger.error('Adaptation error:', error.message);
 
     // Fallback: Basic translation attempt
     return {
@@ -99,10 +100,10 @@ Culturally Adapted: "RBI ने ब्याज दर बढ़ाई है।
 /**
  * Get side-by-side comparison: Google Translate vs ET Nucleus
  */
-export async function getTranslationComparison(content, context) {
+export async function getTranslationComparison(content, context, model) {
   try {
     // Get our culturally adapted version
-    const etNucleus = await adaptToHindi(content, context);
+    const etNucleus = await adaptToHindi(content, context, model);
 
     // Simulate Google Translate (literal translation)
     const googleTranslate = etNucleus.literal_translation;
@@ -129,7 +130,7 @@ export async function getTranslationComparison(content, context) {
     };
 
   } catch (error) {
-    console.error('Comparison error:', error.message);
+    logger.error('Comparison error:', error.message);
 
     return {
       original_english: content,
@@ -143,12 +144,12 @@ export async function getTranslationComparison(content, context) {
 /**
  * Adapt an entire personalized article to Hindi
  */
-export async function adaptArticle(article, context) {
+export async function adaptArticle(article, context, model) {
   try {
     const [headline, lead, takeaway] = await Promise.all([
-      adaptToHindi(article.personalized_headline || article.title, context),
-      adaptToHindi(article.personalized_lead || article.description, context),
-      adaptToHindi(article.key_takeaway || '', context)
+      adaptToHindi(article.personalized_headline || article.title, context, model),
+      adaptToHindi(article.personalized_lead || article.description, context, model),
+      adaptToHindi(article.key_takeaway || '', context, model)
     ]);
 
     return {
@@ -166,7 +167,7 @@ export async function adaptArticle(article, context) {
     };
 
   } catch (error) {
-    console.error('Article adaptation error:', error.message);
+    logger.error('Article adaptation error:', error.message);
 
     return {
       ...article,

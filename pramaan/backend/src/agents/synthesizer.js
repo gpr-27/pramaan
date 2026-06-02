@@ -1,15 +1,14 @@
-import Groq from 'groq-sdk';
+import { groq, resolveModel } from '../lib/groqClient.js';
+import logger from '../lib/logger.js';
 import { searchArticles } from '../tools/news_fetcher.js';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 /**
  * Synthesis Agent
  * Combines multiple articles into one structured briefing
  */
-export async function synthesizeTopic(topic, intent, maxArticles = 5) {
+export async function synthesizeTopic(topic, intent, maxArticles = 5, model) {
   try {
-    console.log(`Synthesizing topic: ${topic} for ${intent.user_type}`);
+    logger.info(`Synthesizing topic: ${topic} for ${intent.user_type}`);
 
     // Step 1: Search for relevant articles
     const articles = await searchArticles(topic, maxArticles);
@@ -89,8 +88,10 @@ Guidelines:
 - Adapt language to user's knowledge level
 - Focus on what matters to THEIR intent`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`synthesizeTopic using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -115,7 +116,7 @@ Guidelines:
     return briefing;
 
   } catch (error) {
-    console.error('Synthesis error:', error.message);
+    logger.error('Synthesis error:', error.message);
 
     // Fallback: at least return the articles we found
     const articles = await searchArticles(topic, maxArticles);
@@ -148,7 +149,7 @@ Guidelines:
 /**
  * Answer a question about a briefing
  */
-export async function answerQuestion(question, briefing, intent) {
+export async function answerQuestion(question, briefing, intent, model) {
   try {
     const prompt = `You are answering a user's question about a news briefing.
 
@@ -179,8 +180,10 @@ Guidelines:
 - Use language appropriate for the user's knowledge level
 - Be concise but complete`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`answerQuestion using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -204,7 +207,7 @@ Guidelines:
     };
 
   } catch (error) {
-    console.error('Q&A error:', error.message);
+    logger.error('Q&A error:', error.message);
 
     return {
       question,

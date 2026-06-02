@@ -157,6 +157,40 @@ class PersonaStore {
   }
 
   /**
+   * Migrate a guest persona to an authenticated account (continuity on sign-in).
+   * Idempotent: if the target already has a persona, the account's persona is
+   * kept and nothing is overwritten. Returns the target persona (or null).
+   */
+  migratePersona(fromUserId, toUserId) {
+    if (!fromUserId || !toUserId || fromUserId === toUserId) return this.personas.get(toUserId) || null;
+
+    // Account already has a persona — keep it, do not clobber with guest data.
+    if (this.personas.has(toUserId)) return this.personas.get(toUserId);
+
+    const src = this.personas.get(fromUserId);
+    if (!src) return null;
+
+    const clone = {
+      ...src,
+      user_id: toUserId,
+      topics_explored: new Set(src.topics_explored),
+      interests: [...(src.interests || [])],
+      articles_read: [...(src.articles_read || [])],
+      questions_asked: [...(src.questions_asked || [])],
+      goals: [...(src.goals || [])],
+      evolution_history: [
+        ...(src.evolution_history || []),
+        { date: new Date().toISOString(), event: 'guest_migrated', details: { from: fromUserId } },
+      ],
+      updated_at: new Date().toISOString(),
+    };
+
+    this.personas.set(toUserId, clone);
+    this.interactions.set(toUserId, [...(this.interactions.get(fromUserId) || [])]);
+    return clone;
+  }
+
+  /**
    * Get interaction history
    */
   getInteractions(userId) {

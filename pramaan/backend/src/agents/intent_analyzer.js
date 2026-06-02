@@ -1,12 +1,11 @@
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+import { groq, resolveModel } from '../lib/groqClient.js';
+import logger from '../lib/logger.js';
 
 /**
  * Intent Analyzer Agent
  * Extracts user intent, context, and topics from natural language input
  */
-export async function analyzeIntent(userInput) {
+export async function analyzeIntent(userInput, model) {
   try {
     const prompt = `You are an AI that understands what people want from business news.
 
@@ -36,8 +35,10 @@ Examples:
 
 Be intelligent about inference. "5 lakhs" suggests first-time investor. Technical terms suggest experience.`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`analyzeIntent using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -58,11 +59,11 @@ Be intelligent about inference. "5 lakhs" suggests first-time investor. Technica
     intent.confidence = userInput.length > 20 ? 'high' : 'medium';
     intent.original_input = userInput;
 
-    console.log('Intent analysis:', JSON.stringify(intent, null, 2));
+    logger.info('Intent analysis:', JSON.stringify(intent, null, 2));
     return intent;
 
   } catch (error) {
-    console.error('Intent analysis error:', error.message);
+    logger.error('Intent analysis error:', error.message);
 
     // Fallback: Basic intent detection
     return {

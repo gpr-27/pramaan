@@ -1,5 +1,6 @@
 import express from 'express';
 import { analyzeIntent, generateProfileSummary } from '../agents/intent_analyzer.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -9,16 +10,16 @@ const router = express.Router();
  */
 router.post('/analyze', async (req, res) => {
   try {
-    const { userInput } = req.body;
+    const { userInput, model } = req.body;
 
     if (!userInput || userInput.trim().length === 0) {
       return res.status(400).json({ error: 'userInput is required' });
     }
 
-    console.log('Analyzing intent for:', userInput);
+    logger.info('analyze', { userInput, model });
 
     // Analyze intent
-    const intent = await analyzeIntent(userInput);
+    const intent = await analyzeIntent(userInput, model);
 
     // Generate friendly profile summary
     const profile = generateProfileSummary(intent);
@@ -30,7 +31,7 @@ router.post('/analyze', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Intent analysis error:', error);
+    logger.error('Intent analysis error:', error);
     res.status(500).json({
       error: 'Failed to analyze intent',
       message: error.message

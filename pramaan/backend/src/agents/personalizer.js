@@ -1,7 +1,6 @@
-import Groq from 'groq-sdk';
+import { groq, resolveModel } from '../lib/groqClient.js';
+import logger from '../lib/logger.js';
 import { getDemoPersonalizedArticle } from '../data/demo_personalized.js';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Demo mode flag (set to true when API rate limited or for consistent demos)
 const USE_DEMO_MODE = true;
@@ -10,13 +9,13 @@ const USE_DEMO_MODE = true;
  * Personalization Agent
  * Adapts news articles to user intent and context
  */
-export async function personalizeArticle(article, intent) {
+export async function personalizeArticle(article, intent, model) {
   try {
     // Check if we have pre-generated demo data for this article
     if (USE_DEMO_MODE) {
       const demoData = getDemoPersonalizedArticle(article.id, intent.user_type);
       if (demoData) {
-        console.log(`Using demo personalization for article ${article.id}, user ${intent.user_type}`);
+        logger.info(`Using demo personalization for article ${article.id}, user ${intent.user_type}`);
         return {
           ...article,
           ...demoData,
@@ -73,8 +72,10 @@ Student seeing same article:
 
 Be highly specific to their context. Use their budget numbers, their specific questions, their language.`;
 
+    const resolvedModel = resolveModel(model);
+    logger.debug(`personalizeArticle using model: ${resolvedModel}`);
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: resolvedModel,
       messages: [
         {
           role: 'system',
@@ -103,7 +104,7 @@ Be highly specific to their context. Use their budget numbers, their specific qu
     };
 
   } catch (error) {
-    console.error('Personalization error:', error.message);
+    logger.error('Personalization error:', error.message);
 
     // Fallback: Return original with basic relevance
     return {
@@ -122,12 +123,12 @@ Be highly specific to their context. Use their budget numbers, their specific qu
 /**
  * Batch personalize multiple articles
  */
-export async function personalizeArticles(articles, intent, maxArticles = 5) {
-  console.log(`Personalizing ${articles.length} articles for ${intent.user_type}...`);
+export async function personalizeArticles(articles, intent, maxArticles = 5, model) {
+  logger.info(`Personalizing ${articles.length} articles for ${intent.user_type}...`);
 
   // Personalize articles in parallel
   const personalizedPromises = articles.slice(0, maxArticles).map(article =>
-    personalizeArticle(article, intent)
+    personalizeArticle(article, intent, model)
   );
 
   const personalized = await Promise.all(personalizedPromises);
@@ -139,7 +140,7 @@ export async function personalizeArticles(articles, intent, maxArticles = 5) {
 /**
  * Get comparison view for multiple user types
  */
-export async function getComparisonView(article) {
+export async function getComparisonView(article, model) {
   const userTypes = [
     {
       user_type: 'first_time_investor',
@@ -166,7 +167,7 @@ export async function getComparisonView(article) {
 
   const comparisons = await Promise.all(
     userTypes.map(async (intent) => {
-      const personalized = await personalizeArticle(article, intent);
+      const personalized = await personalizeArticle(article, intent, model);
       return {
         user_type: intent.user_type,
         headline: personalized.personalized_headline,

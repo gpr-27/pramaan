@@ -3,8 +3,30 @@ import { v4 as uuidv4 } from 'uuid';
 import { personaStore } from '../store/personaStore.js';
 import { analyzeIntent } from '../agents/intent_analyzer.js';
 import { shouldEvolvePersona, evolvePersona, autoUpgradeKnowledge } from '../agents/persona_evolver.js';
+import logger from '../lib/logger.js';
+import { isModelAllowed } from '../config/index.js';
 
 const router = express.Router();
+
+/**
+ * POST /api/persona/migrate
+ * Continuity: copy a guest persona into an authenticated account on sign-in.
+ * Idempotent — if the account already has a persona, nothing is overwritten.
+ */
+router.post('/migrate', (req, res) => {
+  try {
+    const { fromUserId, toUserId } = req.body;
+    if (!fromUserId || !toUserId) {
+      return res.status(400).json({ success: false, error: 'fromUserId and toUserId are required' });
+    }
+    const persona = personaStore.migratePersona(fromUserId, toUserId);
+    logger.info('persona migrate', { fromUserId, toUserId, migrated: Boolean(persona) });
+    res.json({ success: true, migrated: Boolean(persona), persona: persona || null });
+  } catch (error) {
+    logger.error('Persona migration error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 /**
  * POST /api/persona/create
@@ -12,7 +34,7 @@ const router = express.Router();
  */
 router.post('/create', async (req, res) => {
   try {
-    const { userInput, userId } = req.body;
+    const { userInput, userId, model } = req.body;
 
     if (!userInput || !userInput.trim()) {
       return res.status(400).json({
@@ -36,10 +58,10 @@ router.post('/create', async (req, res) => {
     }
 
     // Use Intent Analyzer to create profile from natural language
-    console.log(`🆕 Creating persona for user: ${finalUserId}`);
-    console.log(`   Input: "${userInput}"`);
+    const useModel = isModelAllowed(model) ? model : undefined;
+    logger.info('persona create', { userId: finalUserId, userInput, model: useModel });
 
-    const intent = await analyzeIntent(userInput);
+    const intent = await analyzeIntent(userInput, useModel);
 
     // Create persona profile
     const profile = {
@@ -65,7 +87,7 @@ router.post('/create', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Persona creation error:', error);
+    logger.error('Persona creation error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -96,7 +118,7 @@ router.get('/:userId', (req, res) => {
     });
 
   } catch (error) {
-    console.error('Persona retrieval error:', error);
+    logger.error('Persona retrieval error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -140,7 +162,7 @@ router.post('/:userId/interaction', async (req, res) => {
     const upgradeCheck = autoUpgradeKnowledge(updatedPersona, interactions);
 
     if (upgradeCheck.upgraded) {
-      console.log(`📈 Auto-upgrading ${userId}: ${persona.knowledge_level} → ${upgradeCheck.new_level}`);
+      logger.info('persona auto-upgrade', { userId, from: persona.knowledge_level, to: upgradeCheck.new_level });
 
       personaStore.updatePersona(userId, {
         knowledge_level: upgradeCheck.new_level
@@ -163,7 +185,7 @@ router.post('/:userId/interaction', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Interaction recording error:', error);
+    logger.error('Interaction recording error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -178,7 +200,7 @@ router.post('/:userId/interaction', async (req, res) => {
 router.post('/:userId/evolve', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { force } = req.body; // Force evolution even if rules say no
+    const { force, model } = req.body; // Force evolution even if rules say no
 
     const persona = personaStore.getPersona(userId);
 
@@ -189,10 +211,12 @@ router.post('/:userId/evolve', async (req, res) => {
       });
     }
 
+    const useModel = isModelAllowed(model) ? model : undefined;
+
     const interactions = personaStore.getInteractions(userId);
 
     // Check if evolution is needed
-    const shouldEvolve = await shouldEvolvePersona(persona, interactions);
+    const shouldEvolve = await shouldEvolvePersona(persona, interactions, useModel);
 
     if (!shouldEvolve.should_evolve && !force) {
       return res.json({
@@ -203,11 +227,10 @@ router.post('/:userId/evolve', async (req, res) => {
       });
     }
 
-    console.log(`🔄 Evolving persona for ${userId}...`);
-    console.log(`   Signals:`, shouldEvolve.signals);
+    logger.info('persona evolve', { userId, model: useModel, signals: shouldEvolve.signals });
 
     // Generate evolved persona using AI
-    const evolved = await evolvePersona(persona, interactions, shouldEvolve.signals || []);
+    const evolved = await evolvePersona(persona, interactions, shouldEvolve.signals || [], useModel);
 
     // Update persona
     const updates = {
@@ -241,7 +264,7 @@ router.post('/:userId/evolve', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Persona evolution error:', error);
+    logger.error('Persona evolution error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -283,7 +306,7 @@ router.get('/:userId/history', (req, res) => {
     });
 
   } catch (error) {
-    console.error('History retrieval error:', error);
+    logger.error('History retrieval error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -306,7 +329,7 @@ router.get('/', (req, res) => {
     });
 
   } catch (error) {
-    console.error('Personas retrieval error:', error);
+    logger.error('Personas retrieval error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -338,7 +361,7 @@ router.delete('/:userId', (req, res) => {
     }
 
   } catch (error) {
-    console.error('Persona deletion error:', error);
+    logger.error('Persona deletion error:', error);
     res.status(500).json({
       success: false,
       error: error.message

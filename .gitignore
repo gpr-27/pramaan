@@ -3,6 +3,10 @@ node_modules/
 .pnp
 .pnp.js
 
+# Local tooling / agent config & manual test artifacts (not for production)
+.claude/
+.e2e/
+
 # Build outputs
 dist/
 build/

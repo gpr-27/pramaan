@@ -1,59 +1,99 @@
+// Load configuration FIRST. Importing the config module loads `.env` as a side
+// effect, so every module that depends on configuration sees it.
+import config from './config/index.js';
+import logger from './lib/logger.js';
+
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-import uploadRouter from './routes/upload.js';
-import analyzeRouter from './routes/analyze.js';
-import reportRouter from './routes/report.js';
+import { isGroqConfigured } from './lib/groqClient.js';
+
+// ET Nucleus routers (the only product).
 import intentRouter from './routes/intent.js';
 import nucleusRouter from './routes/nucleus.js';
 import personaRouter from './routes/persona.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+app.disable('x-powered-by');
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174'], credentials: true }));
+// CORS. In the default single-server deploy the frontend is served from the SAME
+// origin as the API, so CORS never applies. This check only matters when the
+// frontend is hosted on a separate origin (set CLIENT_URL / CORS_ORIGINS then).
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      logger.warn(`Blocked CORS origin: ${origin}`);
+      return cb(null, false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded media files
-const uploadDir = path.resolve(__dirname, '..', process.env.UPLOAD_DIR || './uploads');
-app.use('/uploads', express.static(uploadDir));
-
-// Routes
-app.use('/upload', uploadRouter);
-app.use('/analyze', analyzeRouter);
-app.use('/report', reportRouter);
-
-// ET Nucleus routes
+// ── ET Nucleus API ───────────────────────────────────────────────
 app.use('/api/intent', intentRouter);
 app.use('/api/nucleus', nucleusRouter);
 app.use('/api/persona', personaRouter);
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '1.0.0' }));
+app.get('/health', (req, res) =>
+  res.json({ status: 'ok', version: '1.0.0', groq: isGroqConfigured ? 'configured' : 'missing' })
+);
 
+// ── Serve the built frontend (single-server production deploy) ────
+// `npm run build` (frontend) emits static files to frontend/dist. When present,
+// Express serves them and falls back to index.html for client-side routes so the
+// SPA survives hard refresh / deep links. In local dev the Vite dev server
+// handles the frontend, so dist is absent and this block is skipped.
+const distDir = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
+const hasFrontend = fs.existsSync(path.join(distDir, 'index.html'));
+if (hasFrontend) {
+  app.use(express.static(distDir));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && req.path !== '/health') {
+      return res.sendFile(path.join(distDir, 'index.html'));
+    }
+    next();
+  });
+}
+
+// Final error handler (must stay last, after all routes/middleware).
 app.use((err, req, res, next) => {
-  console.error('[Express Error]', err.message);
+  logger.error('Express error:', err.message);
   res.status(500).json({ error: err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n✨ ET Nucleus backend running at http://localhost:${PORT}`);
-  console.log(`   GROQ: ${process.env.GROQ_API_KEY ? '✓ configured' : '✗ missing'}`);
-  console.log(`   NewsAPI: ${process.env.NEWS_API_KEY ? '✓ configured' : '⚠ not configured (optional)'}`);
-  console.log(`\n   ET Nucleus API:`);
-  console.log(`   POST /api/intent/analyze - Analyze user intent`);
-  console.log(`   POST /api/nucleus/personalized-feed - Get personalized news`);
-  console.log(`   POST /api/nucleus/synthesize - Synthesize topic briefing`);
-  console.log(`   POST /api/nucleus/ask - Answer questions`);
-  console.log(`   POST /api/nucleus/translate - Translate to Hindi`);
-  console.log(`\n   Persona Management:`);
-  console.log(`   POST /api/persona/create - Create new persona`);
-  console.log(`   GET  /api/persona/:userId - Get persona`);
-  console.log(`   POST /api/persona/:userId/interaction - Record interaction`);
-  console.log(`   POST /api/persona/:userId/evolve - Evolve persona with AI\n`);
+app.listen(config.port, () => {
+  logger.info('─────────────────────────────────────────────────────────');
+  logger.info('ET Nucleus server started');
+  logger.info(`Listening on port ${config.port}`);
+  logger.info(`NODE_ENV=${config.nodeEnv}`);
+  logger.info(`LLM_PROVIDER=${config.llmProvider}`);
+  logger.info(`DEFAULT_MODEL=${config.defaultModel}`);
+  logger.info(`AVAILABLE_MODELS=${config.availableModels.length}`);
+  logger.info(
+    `CORS origins: ${config.corsOrigins.length ? config.corsOrigins.join(', ') : '(same-origin only)'}`
+  );
+  logger.info(`Groq: ${isGroqConfigured ? 'configured' : 'missing (demo/fallback mode)'}`);
+  logger.info(`NewsAPI: ${config.newsApiKey ? 'configured' : 'not configured (optional, demo data)'}`);
+  logger.info(`Frontend: ${hasFrontend ? 'served from frontend/dist' : 'not built (use Vite dev server)'}`);
+  logger.info('─────────────────────────────────────────────────────────');
+  logger.info('API:');
+  logger.info('  POST /api/intent/analyze              - Analyze user intent');
+  logger.info('  POST /api/nucleus/personalized-feed   - Get personalized news');
+  logger.info('  POST /api/nucleus/synthesize          - Synthesize topic briefing');
+  logger.info('  POST /api/nucleus/ask                 - Answer questions');
+  logger.info('  POST /api/nucleus/translate           - Translate to Hindi');
+  logger.info('  POST /api/persona/create              - Create new persona');
+  logger.info('  GET  /api/persona/:userId             - Get persona');
+  logger.info('  POST /api/persona/:userId/interaction - Record interaction');
+  logger.info('  POST /api/persona/:userId/evolve      - Evolve persona with AI');
+  logger.info('─────────────────────────────────────────────────────────');
 });

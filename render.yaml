@@ -1,0 +1,65 @@
+# Render Blueprint — deploys ET Nucleus as ONE web service.
+# The Express backend serves both the JSON API (/api/*) and the built React
+# frontend (static files + SPA fallback) from a single origin and port.
+#
+# Quick start:
+#   1. Push this repo to GitHub.
+#   2. Render Dashboard → New → Blueprint → pick this repo.
+#   3. Fill in the `sync: false` secrets (GROQ_API_KEY, etc.) when prompted.
+#
+# Render automatically injects PORT; the app listens on it.
+services:
+  - type: web
+    name: et-nucleus
+    runtime: node
+    plan: free
+    rootDir: pramaan
+    # Installs backend + frontend deps, then builds the frontend to frontend/dist.
+    buildCommand: npm run build
+    # Starts the Express server, which serves the API + the built frontend.
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # ── Runtime ──────────────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      - key: LOG_LEVEL
+        value: info
+
+      # ── LLM (backend) ────────────────────────────────────────────────────
+      - key: LLM_PROVIDER
+        value: groq
+      # Set your key in the Render dashboard (kept out of source control).
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DEFAULT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: AVAILABLE_MODELS
+        value: llama-3.1-8b-instant,llama-3.3-70b-versatile,openai/gpt-oss-120b,openai/gpt-oss-20b,openai/gpt-oss-safeguard-20b,qwen/qwen3-32b,groq/compound,groq/compound-mini
+
+      # ── External news API (optional; demo data is used when unset) ─────────
+      - key: NEWS_API_KEY
+        sync: false
+      - key: NEWS_API_URL
+        value: https://newsapi.org/v2/everything
+
+      # ── Frontend build-time vars (VITE_*) — needed during `npm run build` ──
+      - key: VITE_APP_ENV
+        value: production
+      # Empty → frontend calls the API on the same origin (relative /api paths).
+      - key: VITE_API_URL
+        value: ""
+      - key: VITE_LLM_PROVIDER
+        value: groq
+      - key: VITE_DEFAULT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: VITE_AVAILABLE_MODELS
+        value: llama-3.1-8b-instant,llama-3.3-70b-versatile,openai/gpt-oss-120b,openai/gpt-oss-20b,openai/gpt-oss-safeguard-20b,qwen/qwen3-32b,groq/compound,groq/compound-mini
+      - key: VITE_MODEL_LABELS
+        value: "llama-3.1-8b-instant=Llama 3.1 8B;llama-3.3-70b-versatile=Llama 3.3 70B;openai/gpt-oss-120b=GPT-OSS 120B;openai/gpt-oss-20b=GPT-OSS 20B;openai/gpt-oss-safeguard-20b=GPT-OSS Safeguard 20B;qwen/qwen3-32b=Qwen 3 32B;groq/compound=Groq Compound;groq/compound-mini=Groq Compound Mini"
+      # Optional Clerk auth. Leave unset to keep auth disabled (app still boots).
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false

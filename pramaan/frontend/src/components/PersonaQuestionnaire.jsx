@@ -163,19 +163,14 @@ export default function PersonaQuestionnaire({ onComplete }) {
   const currentQ = getCurrentQuestion();
 
   return (
-    <div className="mb-6">
+    <div>
       <ProgressIndicator current={step} total={3} />
 
-      <div className="mb-6">
-        <p className="text-sm text-gray-400 text-center mb-2">
-          Question {step} of 3
-        </p>
-        <h3 className="text-xl font-semibold text-white text-center mb-6">
-          {currentQ.prompt}
-        </h3>
-      </div>
+      <h3 key={step} className="rise mt-5 mb-5 font-display text-xl font-semibold leading-tight text-ink sm:text-2xl">
+        {currentQ.prompt}
+      </h3>
 
-      <div className="space-y-3">
+      <div key={`opts-${step}`} className="rise space-y-2.5">
         {currentQ.options.map((option) => (
           <QuestionCard
             key={option.id}
@@ -187,14 +182,12 @@ export default function PersonaQuestionnaire({ onComplete }) {
       </div>
 
       {step > 1 && (
-        <div className="mt-4">
-          <button
-            onClick={() => setStep(step - 1)}
-            className="text-sm text-gray-400 hover:text-cyan-400 transition-colors"
-          >
-            ← Back
-          </button>
-        </div>
+        <button
+          onClick={() => setStep(step - 1)}
+          className="mt-4 font-mono text-xs font-semibold uppercase tracking-widest text-ink-soft transition-colors hover:text-accent"
+        >
+          ← Back
+        </button>
       )}
     </div>
   );

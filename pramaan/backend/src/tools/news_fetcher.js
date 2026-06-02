@@ -1,4 +1,6 @@
 import axios from 'axios';
+import config from '../config/index.js';
+import logger from '../lib/logger.js';
 
 /**
  * News Fetcher Tool
@@ -110,14 +112,14 @@ export async function fetchNews(options = {}) {
 
   try {
     // Try NewsAPI if key is configured
-    if (process.env.NEWS_API_KEY && process.env.NEWS_API_KEY !== '') {
-      const response = await axios.get('https://newsapi.org/v2/everything', {
+    if (config.newsApiKey && config.newsApiKey !== '') {
+      const response = await axios.get(config.newsApiUrl, {
         params: {
           q: query,
           language,
           pageSize: count,
           sortBy: 'publishedAt',
-          apiKey: process.env.NEWS_API_KEY
+          apiKey: config.newsApiKey
         },
         timeout: 5000
       });
@@ -137,11 +139,11 @@ export async function fetchNews(options = {}) {
       }
     }
   } catch (error) {
-    console.warn('NewsAPI fetch failed, using sample data:', error.message);
+    logger.warn('NewsAPI fetch failed, using sample data:', error.message);
   }
 
   // Fallback to sample articles
-  console.log('Using sample articles for demo');
+  logger.info('Using sample articles for demo');
   return SAMPLE_ARTICLES.slice(0, count);
 }
 
@@ -215,7 +217,7 @@ export async function searchArticles(query, count = 5) {
   const topMatches = sorted.filter(a => a.relevance_score > 0).slice(0, count);
 
   if (topMatches.length === 0) {
-    console.log(`No relevant matches for "${query}", returning general articles`);
+    logger.info(`No relevant matches for "${query}", returning general articles`);
     // Return general articles based on category
     return sorted.slice(0, count);
   }

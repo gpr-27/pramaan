@@ -1,8 +1,30 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   ET Nucleus — Editorial Financial Intelligence design system
+   Warm ivory paper · near-black ink · vermillion + deep-teal
+   Fraunces (display serif) · Hanken Grotesk (UI) · JetBrains Mono (data)
+   ───────────────────────────────────────────────────────────── */
 @theme {
-  --font-family-sans: 'Inter', system-ui, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-paper: #faf6ef;
+  --color-paper-2: #f3ecdf;
+  --color-card: #fffdf9;
+  --color-ink: #1b1714;
+  --color-ink-soft: #6b6258;
+  --color-ink-faint: #9c9286;
+  --color-line: #e7dfce;
+  --color-line-strong: #d6cab3;
+  --color-accent: #d8381a;
+  --color-accent-ink: #b22a10;
+  --color-accent-soft: #fbe6df;
+  --color-teal: #0f6e5e;
+  --color-teal-soft: #ddefe9;
+  --color-gold: #b3801a;
+  --color-gold-soft: #f4ead1;
 }
 
 @layer base {
@@ -10,105 +32,203 @@
     box-sizing: border-box;
   }
 
-  body {
-    background-color: #030712;
-    color: #f3f4f6;
-    font-family: var(--font-family-sans);
+  html {
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
     margin: 0;
     padding: 0;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv01";
+    /* Safety net: never allow horizontal scroll on any device. `clip` (not
+       `hidden`) so it doesn't create a scroll container that would break the
+       sticky dashboard header. */
+    overflow-x: clip;
   }
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  /* Media never forces the layout wider than the viewport. */
+  img, svg, video, canvas, iframe {
+    max-width: 100%;
+    height: auto;
   }
 
-  ::-webkit-scrollbar-track {
-    background: #111827;
+  /* Long unbroken strings (URLs, IDs) wrap instead of overflowing on mobile. */
+  p, h1, h2, h3, h4, li, span, a {
+    overflow-wrap: break-word;
   }
 
+  /* Faint paper grain + a hint of warmth in the corners */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+    background-image:
+      radial-gradient(900px 600px at 88% -8%, rgba(216, 56, 26, 0.06), transparent 60%),
+      radial-gradient(800px 700px at -6% 102%, rgba(15, 110, 94, 0.05), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: var(--color-paper-2); }
   ::-webkit-scrollbar-thumb {
-    background: #374151;
+    background: var(--color-line-strong);
+    border: 3px solid var(--color-paper-2);
     border-radius: 9999px;
   }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
-  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); }
 }
 
 @layer components {
-  .glass-card {
-    background-color: #111827;
-    border: 1px solid #1f2937;
-    border-radius: 0.75rem;
+  /* Mono label that sits above headings — the editorial "kicker" */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-accent-ink);
   }
 
-  .glass-card-hover {
-    background-color: #111827;
-    border: 1px solid #1f2937;
-    border-radius: 0.75rem;
-    transition: border-color 0.2s;
+  .editorial-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    box-shadow: 0 1px 0 rgba(27, 23, 20, 0.02), 0 18px 40px -32px rgba(27, 23, 20, 0.45);
   }
 
-  .glass-card-hover:hover {
-    border-color: #374151;
+  .lift {
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 22px 48px -28px rgba(27, 23, 20, 0.5);
+    border-color: var(--color-line-strong);
   }
 
-  .btn-primary {
-    padding: 0.625rem 1.25rem;
-    background-color: #2563eb;
-    color: white;
-    font-weight: 500;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
+  .btn-accent {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.5rem;
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
     border: none;
+    border-radius: 2px;
     cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    box-shadow: 0 10px 24px -12px rgba(216, 56, 26, 0.65);
   }
-
-  .btn-primary:hover {
-    background-color: #3b82f6;
+  .btn-accent:hover:not(:disabled) {
+    background: var(--color-accent-ink);
+    transform: translateY(-1px);
   }
+  .btn-accent:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
-  .btn-danger {
-    padding: 0.625rem 1.25rem;
-    background-color: #dc2626;
-    color: white;
-    font-weight: 500;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
-    border: none;
+  .btn-ink {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1rem;
+    background: transparent;
+    color: var(--color-ink);
+    font-weight: 600;
+    font-size: 0.875rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 2px;
     cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .btn-ink:hover { background: var(--color-ink); color: var(--color-paper); border-color: var(--color-ink); }
+
+  .field {
+    width: 100%;
+    background: var(--color-paper);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 2px;
+    color: var(--color-ink);
+    padding: 0.85rem 1rem;
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .field::placeholder { color: var(--color-ink-faint); }
+  .field:focus {
+    outline: none;
+    background: var(--color-card);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
   }
 
-  .btn-danger:hover {
-    background-color: #ef4444;
-  }
+  .tabular { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
 
-  .btn-ghost {
-    padding: 0.625rem 1.25rem;
-    background-color: #1f2937;
-    color: #e5e7eb;
-    font-weight: 500;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s;
-    border: none;
-    cursor: pointer;
-  }
+  .hairline { height: 1px; background: var(--color-line); border: 0; }
 
-  .btn-ghost:hover {
-    background-color: #374151;
+  /* Editorial drop-cap on the first paragraph of a briefing/article */
+  .dropcap > p:first-of-type::first-letter,
+  p.dropcap::first-letter {
+    float: left;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 3.1rem;
+    line-height: 0.78;
+    padding: 0.1rem 0.55rem 0 0;
+    color: var(--color-accent);
   }
 }
+
+/* Staggered editorial entrance */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0% { background-position: -800px 0; }
+  100% { background-position: 800px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, var(--color-paper-2) 0%, var(--color-line) 50%, var(--color-paper-2) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s infinite linear;
 }
 
-.shimmer {
-  background: linear-gradient(90deg, #1f2937 0%, #374151 50%, #1f2937 100%);
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
+@media (prefers-reduced-motion: reduce) {
+  .rise, .shimmer { animation: none; }
+  .lift { transition: none; }
+}
+
+/* ── Mobile refinements ───────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Smaller drop-cap so the first paragraph stays readable on phones. */
+  .dropcap > p:first-of-type::first-letter,
+  p.dropcap::first-letter {
+    font-size: 2.4rem;
+    padding-right: 0.4rem;
+  }
+  /* Tighten the oversized editorial buttons on small screens. */
+  .btn-accent { padding: 0.75rem 1.1rem; font-size: 0.9rem; }
 }
