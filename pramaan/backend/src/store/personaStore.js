@@ -1,224 +1,222 @@
 /**
- * In-Memory Persona Store
- * Manages user personas and their evolution over time
+ * Persona store — MongoDB-backed when a reachable MONGODB_URI is configured,
+ * otherwise an in-memory fallback. Both backends expose the SAME async API and
+ * return the SAME persona shape, so routes never branch on the backend.
+ *
+ * `interactions` are stored alongside each persona but kept OUT of the persona
+ * object returned to clients (fetched separately via getInteractions), matching
+ * the original API. `topics_explored` is a plain deduped array.
  */
+import { connectMongo, isMongoConnected } from './db.js';
+import { Persona } from './models/Persona.js';
+import logger from '../lib/logger.js';
+
+const nowIso = () => new Date().toISOString();
+const uniq = (arr) => [...new Set((arr || []).filter(Boolean))];
+
+// Build a fresh persona object from an Intent-Analyzer profile.
+function buildPersona(userId, profile) {
+  const knowledge = profile.context?.knowledge_level || 'beginner';
+  return {
+    user_id: userId,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+
+    user_type: profile.user_type,
+    intent_category: profile.intent_category,
+    context: profile.context || {},
+    topics: profile.topics || [],
+    emotional_tone: profile.emotional_tone || 'neutral',
+    action_needed: profile.action_needed || 'exploration',
+
+    knowledge_level: knowledge,
+    interests: profile.topics || [],
+    goals: profile.goals || [],
+
+    interaction_count: 0,
+    articles_read: [],
+    topics_explored: uniq(profile.topics || []),
+    questions_asked: [],
+
+    evolution_history: [
+      {
+        date: nowIso(),
+        event: 'persona_created',
+        knowledge_level: knowledge,
+        details: { initial_input: profile.original_input || '' },
+      },
+    ],
+    interactions: [],
+  };
+}
+
+// Strip storage-only fields before returning a persona to a client.
+function toPublicPersona(p) {
+  if (!p) return null;
+  const { interactions, _id, __v, ...rest } = p;
+  return rest;
+}
 
 class PersonaStore {
   constructor() {
-    // Map: user_id -> persona object
-    this.personas = new Map();
-
-    // Map: user_id -> interaction history
-    this.interactions = new Map();
+    this.useMongo = false;
+    this.personas = new Map(); // in-memory fallback: userId -> full persona (incl. interactions)
   }
 
-  /**
-   * Create a new persona
-   */
-  createPersona(userId, profile) {
-    const persona = {
-      user_id: userId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+  /** Connect to Mongo if configured/reachable; otherwise stay in-memory. */
+  async init() {
+    this.useMongo = await connectMongo();
+    return this.useMongo;
+  }
 
-      // Core profile from Intent Analyzer
-      user_type: profile.user_type,
-      intent_category: profile.intent_category,
-      context: profile.context || {},
-      topics: profile.topics || [],
-      emotional_tone: profile.emotional_tone || 'neutral',
-      action_needed: profile.action_needed || 'exploration',
+  get backend() {
+    return this._mongo() ? 'mongodb' : 'in-memory';
+  }
 
-      // Learning journey
-      knowledge_level: profile.context?.knowledge_level || 'beginner',
-      interests: profile.topics || [],
-      goals: profile.goals || [],
+  _mongo() {
+    return this.useMongo && isMongoConnected();
+  }
 
-      // Behavior tracking
-      interaction_count: 0,
-      articles_read: [],
-      topics_explored: new Set(profile.topics || []),
-      questions_asked: [],
+  async _load(userId) {
+    if (this._mongo()) return (await Persona.findOne({ user_id: userId }).lean()) || null;
+    return this.personas.get(userId) || null;
+  }
 
-      // Evolution metadata
-      evolution_history: [{
-        date: new Date().toISOString(),
-        event: 'persona_created',
-        knowledge_level: profile.context?.knowledge_level || 'beginner',
-        details: {
-          initial_input: profile.original_input || ''
-        }
-      }]
-    };
-
-    this.personas.set(userId, persona);
-    this.interactions.set(userId, []);
-
-    console.log(`✅ Persona created for user ${userId}: ${persona.user_type}`);
+  async _save(persona) {
+    if (this._mongo()) {
+      const { _id, __v, ...doc } = persona;
+      await Persona.updateOne({ user_id: doc.user_id }, { $set: doc }, { upsert: true });
+    } else {
+      this.personas.set(persona.user_id, persona);
+    }
     return persona;
   }
 
-  /**
-   * Get persona by user ID
-   */
-  getPersona(userId) {
-    return this.personas.get(userId);
+  async createPersona(userId, profile) {
+    const persona = buildPersona(userId, profile);
+    await this._save(persona);
+    logger.info(`Persona created for ${userId}: ${persona.user_type} [${this.backend}]`);
+    return toPublicPersona(persona);
   }
 
-  /**
-   * Check if persona exists
-   */
-  hasPersona(userId) {
+  async getPersona(userId) {
+    return toPublicPersona(await this._load(userId));
+  }
+
+  async hasPersona(userId) {
+    if (this._mongo()) return Boolean(await Persona.exists({ user_id: userId }));
     return this.personas.has(userId);
   }
 
-  /**
-   * Record an interaction
-   */
-  recordInteraction(userId, interaction) {
-    if (!this.personas.has(userId)) {
-      console.warn(`⚠️ No persona found for user ${userId}`);
+  async recordInteraction(userId, interaction) {
+    const persona = await this._load(userId);
+    if (!persona) {
+      logger.warn(`recordInteraction: no persona for ${userId}`);
       return null;
     }
+    persona.interactions = persona.interactions || [];
+    persona.interactions.push({ timestamp: nowIso(), type: interaction.type, data: interaction.data || {} });
+    persona.interaction_count = (persona.interaction_count || 0) + 1;
+    persona.updated_at = nowIso();
 
-    const persona = this.personas.get(userId);
-    const interactions = this.interactions.get(userId);
-
-    // Add interaction to history
-    const interactionRecord = {
-      timestamp: new Date().toISOString(),
-      type: interaction.type,
-      data: interaction.data
-    };
-    interactions.push(interactionRecord);
-
-    // Update persona stats
-    persona.interaction_count += 1;
-    persona.updated_at = new Date().toISOString();
-
-    // Track specific behaviors
+    const data = interaction.data || {};
     if (interaction.type === 'article_read') {
-      persona.articles_read.push(interaction.data.article_id);
-
-      // Track topics from article
-      if (interaction.data.category) {
-        persona.topics_explored.add(interaction.data.category);
-      }
+      if (data.article_id) persona.articles_read.push(data.article_id);
+      if (data.category) persona.topics_explored = uniq([...persona.topics_explored, data.category]);
     } else if (interaction.type === 'question_asked') {
-      persona.questions_asked.push(interaction.data.question);
+      if (data.question) persona.questions_asked.push(data.question);
     } else if (interaction.type === 'synthesis_request') {
-      persona.topics_explored.add(interaction.data.topic);
+      if (data.topic) persona.topics_explored = uniq([...persona.topics_explored, data.topic]);
     }
 
-    this.personas.set(userId, persona);
-    this.interactions.set(userId, interactions);
-
-    console.log(`📝 Interaction recorded for ${userId}: ${interaction.type} (total: ${persona.interaction_count})`);
-    return persona;
+    await this._save(persona);
+    return toPublicPersona(persona);
   }
 
-  /**
-   * Update persona profile (after evolution)
-   */
-  updatePersona(userId, updates) {
-    if (!this.personas.has(userId)) {
-      console.warn(`⚠️ No persona found for user ${userId}`);
+  async updatePersona(userId, updates) {
+    const persona = await this._load(userId);
+    if (!persona) {
+      logger.warn(`updatePersona: no persona for ${userId}`);
       return null;
     }
-
-    const persona = this.personas.get(userId);
-
-    // Merge updates
     Object.assign(persona, updates);
-    persona.updated_at = new Date().toISOString();
+    persona.updated_at = nowIso();
+    await this._save(persona);
+    return toPublicPersona(persona);
+  }
 
-    this.personas.set(userId, persona);
-
-    console.log(`✨ Persona updated for ${userId}`);
-    return persona;
+  async addEvolutionEvent(userId, event) {
+    const persona = await this._load(userId);
+    if (!persona) return null;
+    persona.evolution_history = persona.evolution_history || [];
+    persona.evolution_history.push({ date: nowIso(), ...event });
+    await this._save(persona);
+    return toPublicPersona(persona);
   }
 
   /**
-   * Add evolution event
+   * Copy a guest persona into an authenticated account on sign-in. Idempotent:
+   * if the target already has a persona, it is kept and nothing is overwritten.
    */
-  addEvolutionEvent(userId, event) {
-    if (!this.personas.has(userId)) {
-      return null;
+  async migratePersona(fromUserId, toUserId) {
+    if (!fromUserId || !toUserId || fromUserId === toUserId) {
+      return toPublicPersona(await this._load(toUserId));
     }
+    if (await this.hasPersona(toUserId)) return toPublicPersona(await this._load(toUserId));
 
-    const persona = this.personas.get(userId);
-    persona.evolution_history.push({
-      date: new Date().toISOString(),
-      ...event
-    });
-
-    this.personas.set(userId, persona);
-    return persona;
-  }
-
-  /**
-   * Migrate a guest persona to an authenticated account (continuity on sign-in).
-   * Idempotent: if the target already has a persona, the account's persona is
-   * kept and nothing is overwritten. Returns the target persona (or null).
-   */
-  migratePersona(fromUserId, toUserId) {
-    if (!fromUserId || !toUserId || fromUserId === toUserId) return this.personas.get(toUserId) || null;
-
-    // Account already has a persona — keep it, do not clobber with guest data.
-    if (this.personas.has(toUserId)) return this.personas.get(toUserId);
-
-    const src = this.personas.get(fromUserId);
+    const src = await this._load(fromUserId);
     if (!src) return null;
 
     const clone = {
       ...src,
       user_id: toUserId,
-      topics_explored: new Set(src.topics_explored),
+      topics_explored: uniq(src.topics_explored),
       interests: [...(src.interests || [])],
       articles_read: [...(src.articles_read || [])],
       questions_asked: [...(src.questions_asked || [])],
       goals: [...(src.goals || [])],
+      interactions: [...(src.interactions || [])],
       evolution_history: [
         ...(src.evolution_history || []),
-        { date: new Date().toISOString(), event: 'guest_migrated', details: { from: fromUserId } },
+        { date: nowIso(), event: 'guest_migrated', details: { from: fromUserId } },
       ],
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     };
-
-    this.personas.set(toUserId, clone);
-    this.interactions.set(toUserId, [...(this.interactions.get(fromUserId) || [])]);
-    return clone;
+    delete clone._id;
+    delete clone.__v;
+    await this._save(clone);
+    return toPublicPersona(clone);
   }
 
-  /**
-   * Get interaction history
-   */
-  getInteractions(userId) {
-    return this.interactions.get(userId) || [];
+  async getInteractions(userId) {
+    const p = await this._load(userId);
+    return p?.interactions || [];
   }
 
-  /**
-   * Get all personas (for debugging)
-   */
-  getAllPersonas() {
-    return Array.from(this.personas.entries()).map(([userId, persona]) => ({
-      user_id: userId,
-      user_type: persona.user_type,
-      knowledge_level: persona.knowledge_level,
-      interaction_count: persona.interaction_count,
-      created_at: persona.created_at
-    }));
+  async getAllPersonas() {
+    const pick = (p) => ({
+      user_id: p.user_id,
+      user_type: p.user_type,
+      knowledge_level: p.knowledge_level,
+      interaction_count: p.interaction_count,
+      created_at: p.created_at,
+    });
+    if (this._mongo()) {
+      const docs = await Persona.find({}, 'user_id user_type knowledge_level interaction_count created_at').lean();
+      return docs.map(pick);
+    }
+    return Array.from(this.personas.values()).map(pick);
   }
 
-  /**
-   * Clear store (for testing)
-   */
-  clear() {
-    this.personas.clear();
-    this.interactions.clear();
-    console.log('🗑️  Persona store cleared');
+  async deletePersona(userId) {
+    if (this._mongo()) {
+      const res = await Persona.deleteOne({ user_id: userId });
+      return res.deletedCount > 0;
+    }
+    return this.personas.delete(userId);
   }
 }
 
-// Singleton instance
+// Singleton instance.
 export const personaStore = new PersonaStore();
+export default personaStore;

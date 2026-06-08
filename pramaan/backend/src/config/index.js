@@ -108,6 +108,17 @@ if (newsApiKey && newsApiUrl === '') {
   errors.push('Missing NEWS_API_URL (required when NEWS_API_KEY is set)');
 }
 
+// ── Persistence & auth (both optional) ───────────────────────────────────────
+// MongoDB connection string. When empty (or unreachable at boot) the app falls
+// back to an in-memory persona store, so it still runs without a database.
+const mongodbUri = optional('MONGODB_URI', '');
+// Clerk secret key (backend session verification). When empty, backend auth is a
+// no-op and the app uses guest ids only (still fully usable).
+const clerkSecretKey = optional('CLERK_SECRET_KEY', '');
+// Clerk publishable key — the frontend uses VITE_CLERK_PUBLISHABLE_KEY; the
+// backend middleware accepts either name. Optional.
+const clerkPublishableKey = optional('CLERK_PUBLISHABLE_KEY', '') || optional('VITE_CLERK_PUBLISHABLE_KEY', '');
+
 // ── Fail fast ────────────────────────────────────────────────────────────────
 if (errors.length > 0) {
   // Use raw stderr here: the logger depends on a valid config, which we do not
@@ -147,6 +158,11 @@ export const config = Object.freeze({
   // External services
   newsApiKey,
   newsApiUrl,
+
+  // Persistence & auth
+  mongodbUri,
+  clerkSecretKey,
+  clerkPublishableKey,
 });
 
 // Convenient named exports.
@@ -162,10 +178,18 @@ export const {
   availableModels: AVAILABLE_MODELS,
   newsApiKey: NEWS_API_KEY,
   newsApiUrl: NEWS_API_URL,
+  mongodbUri: MONGODB_URI,
+  clerkSecretKey: CLERK_SECRET_KEY,
 } = config;
 
 /** True when an LLM API key is configured. */
 export const isGroqConfigured = Boolean(config.groqApiKey);
+
+/** True when a MongoDB connection string is configured. */
+export const isMongoConfigured = Boolean(config.mongodbUri);
+
+/** True when a Clerk secret key is configured (backend session verification). */
+export const isClerkConfigured = Boolean(config.clerkSecretKey);
 
 /** Is `model` one of the configured AVAILABLE_MODELS? */
 export function isModelAllowed(model) {

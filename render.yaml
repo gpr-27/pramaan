@@ -47,6 +47,16 @@ services:
       - key: NEWS_API_URL
         value: https://newsapi.org/v2/everything
 
+      # ── Persistence & backend auth (both optional) ────────────────────────
+      # MongoDB Atlas connection string. Empty → in-memory store (resets on
+      # restart). NOTE: in Atlas → Network Access, allow 0.0.0.0/0 (or Render's
+      # egress IPs) so the deployed service can reach the cluster.
+      - key: MONGODB_URI
+        sync: false
+      # Clerk SECRET key (sk_…) — backend session verification. Empty → guest-only.
+      - key: CLERK_SECRET_KEY
+        sync: false
+
       # ── Frontend build-time vars (VITE_*) — needed during `npm run build` ──
       - key: VITE_APP_ENV
         value: production

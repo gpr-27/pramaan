@@ -202,9 +202,10 @@ A [`render.yaml`](../render.yaml) Blueprint lives at the repo root.
 Then add the environment variables from [§9](#9-environment-variables) (the
 `VITE_*` ones are needed **at build time**). Render injects `PORT` automatically.
 
-> **Note on persona storage:** personas live in an **in-memory** store, so they
-> reset on every deploy/restart (and Render's free tier sleeps when idle). That's
-> fine for a demo; swap in a database for durable storage.
+> **Note on persona storage:** set `MONGODB_URI` and personas **persist** in
+> MongoDB across restarts/deploys. Leave it empty and the app falls back to an
+> **in-memory** store (resets on restart) — handy for a quick demo. On MongoDB
+> Atlas, allow your server's IP (or `0.0.0.0/0`) under **Network Access**.
 
 ---
 
@@ -310,6 +311,8 @@ through one config module per side. The annotated template lives at
 | `AVAILABLE_MODELS` | ✓ | `llama-3.3-70b-versatile,llama-3.1-8b-instant,…` | Comma-separated model ids the app may use. Drives the model selector. |
 | `NEWS_API_KEY` | — | *(empty)* | Optional [NewsAPI](https://newsapi.org) key; otherwise built-in sample articles are used. |
 | `NEWS_API_URL` | ✓* | `https://newsapi.org/v2/everything` | NewsAPI endpoint. *Required only when `NEWS_API_KEY` is set. |
+| `MONGODB_URI` | — | `mongodb+srv://…` | MongoDB connection string. Empty → in-memory store (resets on restart). Set it to **persist** personas. |
+| `CLERK_SECRET_KEY` | — | `sk_…` | Clerk secret key for **backend session verification**. Empty → guest-only. Pairs with `VITE_CLERK_PUBLISHABLE_KEY`. |
 | `CLIENT_URL` | — | *(empty)* | Only for a **split** deploy (frontend on a different origin). Empty in the single-server setup. |
 | `CORS_ORIGINS` | — | *(empty)* | Comma-separated allowed origins. Defaults to `CLIENT_URL`. Empty → same-origin only. |
 
