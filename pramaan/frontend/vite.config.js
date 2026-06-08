@@ -29,5 +29,11 @@ export default defineConfig(({ mode }) => {
     envDir,
     server: { port: devPort, proxy },
     preview: { port: devPort, proxy },
+    build: {
+      // Single bundle is fine for this app (~145 kB gzip in production). Raise
+      // the advisory size limit (Vite's own recommended option) rather than
+      // over-splitting into chunks that risk circular init order.
+      chunkSizeWarningLimit: 800,
+    },
   };
 });

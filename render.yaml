@@ -13,6 +13,7 @@ services:
     name: et-nucleus
     runtime: node
     plan: free
+    region: singapore
     rootDir: pramaan
     # Installs backend + frontend deps, then builds the frontend to frontend/dist.
     buildCommand: npm run build

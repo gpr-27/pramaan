@@ -105,16 +105,14 @@ router.get('/:userId', (req, res) => {
 
     const persona = personaStore.getPersona(userId);
 
-    if (!persona) {
-      return res.status(404).json({
-        success: false,
-        error: 'Persona not found'
-      });
-    }
-
+    // A missing persona is the NORMAL "new visitor" case — the home page probes
+    // this on every load. Return 200 with persona:null (instead of a 404 that
+    // would log a red error in the browser console on every fresh visit); the
+    // client branches on `exists`.
     res.json({
       success: true,
-      persona
+      exists: Boolean(persona),
+      persona: persona || null,
     });
 
   } catch (error) {

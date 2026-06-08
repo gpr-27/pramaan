@@ -208,6 +208,7 @@ export default function NucleusHome() {
                 <input
                   type="text"
                   name="userName"
+                  autoComplete="name"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   placeholder="e.g., Priya Sharma"
@@ -250,6 +251,8 @@ export default function NucleusHome() {
             </div>
 
             <textarea
+              name="userInput"
+              autoComplete="off"
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={(e) => {
